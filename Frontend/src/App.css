@@ -1,0 +1,130 @@
+/* App.css */
+
+body, html, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100vh;
+}
+
+.app-header {
+  text-align: center;
+  margin-bottom: 20px;
+  padding: 10px 0;
+  width: 100%;
+}
+
+.input-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+input[type="text"] {
+  padding: 10px;
+  width: 300px;
+  font-size: 16px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+}
+
+.mic-button {
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 24px;
+  margin-left: -40px;
+  position: relative;
+}
+
+.app-main {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  height: calc(100% - 120px); /* Ensure space is left for the header */
+  align-items: center;
+}
+
+.image-display-box {
+  width: 70%; /* Ensure the container takes a consistent size */
+  height: 100%; /* Set to 100% of the available height */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #f0f0f0;
+  position: relative;
+  overflow: hidden;
+  padding: 40px;
+  box-sizing: border-box;
+}
+
+.image-display {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.image {
+  max-width: 100%;
+  max-height: 100%; /* Ensure the image fits within the box */
+  object-fit: cover; /* Ensures the image maintains aspect ratio */
+  border-radius: 10px;
+  transition: transform 0.5s ease-in-out;
+}
+
+.image-display.left .image {
+  transform: translateX(100%);
+}
+
+.image-display.right .image {
+  transform: translateX(-100%);
+}
+
+/* Navigation buttons */
+.prev-button, .next-button {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  font-size: 30px;
+  padding: 10px 15px;
+  cursor: pointer;
+  z-index: 2;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.prev-button {
+  left: 15px;
+}
+
+.next-button {
+  right: 15px;
+}
+
+.prev-button:hover, .next-button:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+  box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.4);
+}
+
+.navigation-info {
+  margin-top: 10px;
+  font-size: 16px;
+  color: #333;
+}
