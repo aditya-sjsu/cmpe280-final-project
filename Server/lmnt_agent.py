@@ -5,11 +5,13 @@ import playsound
 from pydub.playback import play
 import ast
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
+from dotenv import load_dotenv
 
-LMNT_API_KEY = '0b1e2b895ece4fc8a3a70c1bc2d574b2'  
-
+# Load environment variables
+load_dotenv()
 
 class Message(BaseModel):
     message: list[str]
@@ -28,13 +30,29 @@ def encode_wav_to_base64(wav_file_path):
 
 app = FastAPI()
 
+# Configure CORS
+origins = [
+    "http://localhost:3000",  # React default port
+    "http://localhost:3003",  # Alternative React port
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3003",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 
 @app.post('/lmnt')
 async def handle_text_to_speech(msg: Message):
     count = 0
     baseList = []
-    async with Speech('0b1e2b895ece4fc8a3a70c1bc2d574b2') as speech:
+    async with Speech(os.getenv('LMNT_API_KEY')) as speech:
         for sentences in msg.message:
             if not sentences.strip():
                 continue  # Skip empty or whitespace-only strings
@@ -54,4 +72,4 @@ async def handle_text_to_speech(msg: Message):
 if __name__ == "__main__":
     import uvicorn
     print("......LMNT Server")
-    uvicorn.run(app, host="0.0.0.0", port=3001)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv('LMNT_SERVER_PORT', 3001)))

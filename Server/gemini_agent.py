@@ -1,10 +1,14 @@
 # Importing necessary libraries
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
 import google.generativeai as genai
-
 import time
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # gemini = agent.Agent(
 #     name="Gemini",
@@ -15,16 +19,27 @@ import time
 class Message(BaseModel):
     message: str
 
-
-
- 
-
 app = FastAPI()
-genai.configure(api_key="AIzaSyAcl7_u9rWvhyKgO7dTRula5470WRhick0") 
 
+# Configure CORS
+origins = [
+    "http://localhost:3000",  # React default port
+    "http://localhost:3003",  # Alternative React port
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3003",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
 model = genai.GenerativeModel("gemini-2.0-flash")
-
 
 chat = model.start_chat(history=[])
 
@@ -47,35 +62,26 @@ def filter_inappropriate(text, inappropriate_words):
         if word in inappropriate_words:
             return True
 
-
-
 @app.post('/gemini')
 async def handle_message(message: Message):
     while True:
-
         user_message = message.message
-
 
         if user_message.lower() == "quit":
             return -1
 
-
         response = chat.send_message(user_message, stream=True)
 
-
         full_response_text = []
-
 
         for chunk in response:
             full_response_text.append(str(chunk.text))
 
         return full_response_text
 
-
-
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=3000)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv('GEMINI_SERVER_PORT', 3000)))
 
 # @Gemini_agent.on_event("startup")
 # async def address(ctx: Context):

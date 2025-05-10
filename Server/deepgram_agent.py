@@ -1,6 +1,6 @@
-
 import ast
 from dotenv import load_dotenv
+import os
 import logging
 from deepgram.utils import verboselogs
 from datetime import datetime, timedelta
@@ -21,7 +21,8 @@ from pydub.playback import play
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-
+# Load environment variables
+load_dotenv()
 
 class Message(BaseModel):
     message: str
@@ -54,7 +55,7 @@ def get_data():
         config = DeepgramClientOptions(
             verbose=verboselogs.SPAM,
         )
-        deepgram = DeepgramClient("455f87ad3614a2faf17b24d07b892654e3e9f03b", config)
+        deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), config)
 
 
         with open("output.wav", "rb") as stream:
@@ -86,9 +87,12 @@ def get_data():
 
 app = FastAPI()
 
+# Configure CORS
 origins = [
-    "http://localhost:3003",
-    # Add your frontend origins here
+    "http://localhost:3000",  # React default port
+    "http://localhost:3003",  # Alternative React port
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3003",
 ]
 
 app.add_middleware(
@@ -120,7 +124,7 @@ async def speech_to_text(msg: Message):
 if __name__ == "__main__":
     import uvicorn
     print("......DeepGram Server")
-    uvicorn.run(app, host="0.0.0.0", port=3002)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv('DEEPGRAM_SERVER_PORT', 3002)))
 
     
     

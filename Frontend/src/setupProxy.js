@@ -8,16 +8,23 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 
 module.exports = function(app) {
     app.use(
-        'http://10.42.131.20:3002/deepgram', // First API endpoint
+        '/deepgram',
         createProxyMiddleware({
-            target: 'http://localhost:3002', // Target server
+            target: 'http://localhost:8000',
             changeOrigin: true,
         })
     );
     app.use(
-        'http://10.42.131.20:3002/gemini', // Second API endpoint
+        '/gemini',
         createProxyMiddleware({
-            target: 'http://localhost:3000', // Another target server
+            target: 'http://localhost:8000',
+            changeOrigin: true,
+        })
+    );
+    app.use(
+        '/lmnt',
+        createProxyMiddleware({
+            target: 'http://localhost:8000',
             changeOrigin: true,
         })
     );
