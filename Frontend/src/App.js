@@ -4,77 +4,86 @@ import './App.css';
 import './css/homePage.css'
 import { isVisible } from "@testing-library/user-event/dist/utils";
 
-
 const App = () => {
   const [inputText, setInputText] = useState("");
   const [currentImage, setCurrentImage] = useState(0);
   const [storyText, setStoryText] = useState([]);
+  const [storyParts, setStoryParts] = useState([]);
+  const [generatedImages, setGeneratedImages] = useState([]);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [audioSrc, setAudioSrc] = useState([]); // Store decoded audio URL
-  const [isRecording, setIsRecording] = useState(false); // Track if the mic is recording
+  const [audioSrc, setAudioSrc] = useState([]);
+  const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef(null);
-  const chunks = useRef([]); // To store audio data
+  const chunks = useRef([]);
   const [readyState, setreadyState] = useState(false)
   const [isMainVisible, setisMainVisible] = useState(true)
-
-
-  const images = [
-    '/images/7.png',
-    '/images/8.png',
-    '/images/9.png',
-  ];
-
-  useEffect(() => {
-    // Set up the interval to switch the image every 5 seconds (5000 ms)
-    const intervalId = setInterval(() => {
-      setCurrentImage((prevImage) => (prevImage + 1) % images.length);
-    }, 5000);
-
-    // Clear the interval when the component unmounts
-    return () => clearInterval(intervalId);
-  }, [images.length]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [audioDuration, setAudioDuration] = useState(0);
 
   const BASE_API = "http://localhost:8000"
+  const CLIPDROP_API = "http://localhost:3004"
 
+  useEffect(() => {
+    if (generatedImages.length > 0 && storyParts.length > 0 && audioDuration > 0) {
+      // Calculate total characters in all parts
+      const totalChars = storyParts.reduce((acc, part) => acc + part.length, 0);
+      let currentTime = 0;
+      
+      const intervals = storyParts.map((part, index) => {
+        // Calculate characters in this part
+        const partChars = part.length;
+        // Calculate duration based on character proportion
+        const duration = (partChars / totalChars) * audioDuration * 1000; // Convert to milliseconds
+        currentTime += duration;
+        
+        return setTimeout(() => {
+          setCurrentImage(index);
+        }, currentTime);
+      });
 
+      // Set initial image
+      setCurrentImage(0);
 
-  // const handleNext = () => {
-  //   if (!isAnimating) {
-  //     setIsAnimating(true);
-  //     setTimeout(() => {
-  //       setCurrentImage((prev) => (prev === images.length - 1 ? 0 : prev + 1));
-  //       setIsAnimating(false);
-  //     }, 500); // Duration of the animation
-  //   }
-  // };
+      return () => {
+        intervals.forEach(clearTimeout);
+      };
+    }
+  }, [generatedImages.length, storyParts, audioDuration]);
 
-  // const handlePrevious = () => {
-  //   if (!isAnimating) {
-  //     setIsAnimating(true);
-  //     setTimeout(() => {
-  //       setCurrentImage((prev) => (prev === 0 ? images.length - 1 : prev - 1));
-  //       setIsAnimating(false);
-  //     }, 500); // Duration of the animation
-  //   }
-  // };
+  const generateImagesForStory = async (parts) => {
+    setIsLoading(true);
+    const images = [];
+    for (const part of parts) {
+      try {
+        const response = await axios.post(CLIPDROP_API + "/clipdrop", {
+          message: part
+        });
+        if (response.data.image) {
+          images.push(`data:image/png;base64,${response.data.image}`);
+        }
+      } catch (error) {
+        console.error("Error generating image:", error);
+      }
+    }
+    setGeneratedImages(images);
+    setIsLoading(false);
+  };
 
   const handleRecord = () => {
     if (isRecording) {
-      mediaRecorderRef.current.stop(); // Stop recording
+      mediaRecorderRef.current.stop();
       setIsRecording(false);
     } else {
-      // Request audio access from the user
       navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
         const mediaRecorder = new MediaRecorder(stream);
         mediaRecorderRef.current = mediaRecorder;
         chunks.current = [];
 
-        // Store the data in chunks
         mediaRecorder.ondataavailable = (e) => {
           chunks.current.push(e.data);
         };
 
-        // When the recording stops
         mediaRecorder.onstop = () => {
           const blob = new Blob(chunks.current, { type: "audio/wav" });
           sendAudioToAPI(blob);
@@ -83,7 +92,7 @@ const App = () => {
         };
 
         mediaRecorder.start();
-        setIsRecording(true); // Update state to show that we are recording
+        setIsRecording(true);
       });
     }
   };
@@ -92,7 +101,7 @@ const App = () => {
     return new Promise((resolve, reject) => {
       var reader = new FileReader();
       reader.onloadend = () => {
-        const base64String = reader.result.split(',')[1]; // Extract Base64 string without MIME type
+        const base64String = reader.result.split(',')[1];
         resolve(base64String);
       };
       reader.onerror = (error) => reject(error);
@@ -117,6 +126,9 @@ const App = () => {
     const playNext = () => {
       if (idx < urls.length) {
         const audio = new Audio(urls[idx]);
+        audio.addEventListener('loadedmetadata', () => {
+          setAudioDuration(audio.duration);
+        });
         audio.onended = playNext;
         audio.play();
         idx++;
@@ -125,166 +137,138 @@ const App = () => {
     playNext();
   };
 
-  const submitRequest = (textToSend) => {
+  const submitRequest = async (textToSend) => {
     if (textToSend) {
-      axios.post(BASE_API + "/gemini", { "message": String(textToSend) }).then((resGemi) => {
-        setStoryText(resGemi.data);
-        axios.post(BASE_API + "/lmnt", { "message": resGemi.data }).then((resLMNT) => {
-          const urls = resLMNT.data
-            .map(decodeBase64Audio)
-            .filter(Boolean); // Only valid URLs
-          setAudioSrc(urls);
-          setreadyState(true);
-          handleStory(urls);
-          alert("Story Generated");
-        }).catch(e => alert(e));
-      });
+      try {
+        setIsGenerating(true);
+        const resGemi = await axios.post(BASE_API + "/gemini", { "message": String(textToSend) });
+        setStoryText(resGemi.data.full_text);
+        setStoryParts(resGemi.data.story_parts);
+        
+        // Generate images for each story part
+        await generateImagesForStory(resGemi.data.story_parts);
+
+        const resLMNT = await axios.post(BASE_API + "/lmnt", { "message": [resGemi.data.full_text] });
+        const urls = resLMNT.data
+          .map(decodeBase64Audio)
+          .filter(Boolean);
+        setAudioSrc(urls);
+        setreadyState(true);
+        handleStory(urls);
+        setIsGenerating(false);
+        alert("Story Generated");
+      } catch (e) {
+        setIsGenerating(false);
+        alert(e);
+      }
     }
   };
 
-  // Function to send the recorded audio blob to an API endpoint
-  const sendAudioToAPI = (audioBlob) => {
-    convertBlobToBase64(audioBlob).then((base64) => {
-      axios.post(BASE_API + "/deepgram", {
-        "message": base64
-      }).then((res) => {
-        axios.post(BASE_API + "/gemini", { "message": res.data }).then((resGemi) => {
-          setStoryText(resGemi.data);
-          axios.post(BASE_API + "/lmnt", { "message": resGemi.data }).then((resLMNT) => {
-            const urls = resLMNT.data
-              .map(decodeBase64Audio)
-              .filter(Boolean); // Only valid URLs
-            setAudioSrc(urls);
-            setreadyState(true);
-            handleStory(urls);
-            alert("Story Generated");
-          }).catch(e => alert(e));
-        });
-      });
-    });
+  const sendAudioToAPI = async (audioBlob) => {
+    try {
+      setIsGenerating(true);
+      const base64 = await convertBlobToBase64(audioBlob);
+      const res = await axios.post(BASE_API + "/deepgram", { "message": base64 });
+      const resGemi = await axios.post(BASE_API + "/gemini", { "message": res.data });
+      
+      setStoryText(resGemi.data.full_text);
+      setStoryParts(resGemi.data.story_parts);
+      
+      // Generate images for each story part
+      await generateImagesForStory(resGemi.data.story_parts);
+
+      const resLMNT = await axios.post(BASE_API + "/lmnt", { "message": [resGemi.data.full_text] });
+      const urls = resLMNT.data
+        .map(decodeBase64Audio)
+        .filter(Boolean);
+      setAudioSrc(urls);
+      setreadyState(true);
+      handleStory(urls);
+      setIsGenerating(false);
+      alert("Story Generated");
+    } catch (e) {
+      setIsGenerating(false);
+      alert(e);
+    }
   };
-  const [text, setText] = useState('');
-  const fullText = 'Hi, Excited for Story'; // The full text to be typed
-  const typingSpeed = 100; // Speed in milliseconds
-
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [inputValue, setInputValue] = useState('');
-
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      setCurrentImageIndex((prevIndex) => (prevIndex + 1) % images.length);
-    }, 5000); // Change image every 5 seconds
-
-    return () => clearInterval(intervalId); // Clean up the interval on unmount
-  }, [images.length]);
-
-  useEffect(() => {
-    let index = 0;
-    const intervalId = setInterval(() => {
-      if (index < fullText.length) {
-        setText((prevText) => prevText + fullText.charAt(index)); // Add one character at a time
-        index++;
-      } else {
-        clearInterval(intervalId); // Clear interval when done
-      }
-    }, []);
-
-    return () => clearInterval(intervalId); // Clean up the interval on unmount
-  }, []);
 
   return (
-
     <div className="home-page">
-      {
-        isMainVisible &&
+      {isMainVisible && (
         <div className="home-first_page">
           <div className="typing-container">
-            <h1 className="typing-text">{text}</h1>
+            <h1 className="typing-text">Hi, Excited for Story</h1>
           </div>
           <div className="greeting-page-container">
-            <button className="mic-button" onClick={handleRecord}>
-              {isRecording ? '🎤' : '🎙️'} {/* Show different icon when recording */} </button>
-            <input type="text" onChange={(e) => setInputText(e.target.value)} placeholder="Enter the story description" />
-            <button onClick={() => submitRequest(inputText)}>Submit</button>
+            {isGenerating ? (
+              <div className="loading-spinner">
+                <div className="spinner"></div>
+                <p>Generating your story...</p>
+              </div>
+            ) : (
+              <>
+                <button className="mic-button" onClick={handleRecord}>
+                  {isRecording ? '🎤' : '🎙️'}
+                </button>
+                <input 
+                  type="text" 
+                  onChange={(e) => setInputText(e.target.value)} 
+                  placeholder="Enter the story description" 
+                />
+                <button onClick={() => submitRequest(inputText)}>Submit</button>
+              </>
+            )}
           </div>
         </div>
-      }
-      {!isMainVisible &&
+      )}
+      {!isMainVisible && (
         <div className="story-container">
           <div className="story-partition">
             <div className="pictures-container">
-              <img
-                src={images[currentImageIndex]}
-                alt={`Slide ${currentImageIndex}`}
-                style={{
-                  transition: 'opacity 1s ease-in-out',
-                }}
-              />
+              {isGenerating ? (
+                <div className="loading-spinner">
+                  <div className="spinner"></div>
+                  <p>Generating your story...</p>
+                </div>
+              ) : isLoading ? (
+                <div className="loading-spinner">
+                  <div className="spinner"></div>
+                  <p>Generating images...</p>
+                </div>
+              ) : generatedImages.length > 0 ? (
+                <img
+                  src={generatedImages[currentImage]}
+                  alt={`Story part ${currentImage + 1}`}
+                  style={{
+                    transition: 'opacity 1s ease-in-out',
+                    maxWidth: '100%',
+                    height: 'auto'
+                  }}
+                />
+              ) : (
+                <div>No images available</div>
+              )}
             </div>
             <div className="text-container">
               <p>{storyText}</p>
             </div>
           </div>
           <div className="input-section">
+            <button className="mic-button" onClick={handleRecord}>
+              {isRecording ? '🎤' : '🎙️'}
+            </button>
             <input
               type="text"
               placeholder="Enter the Description for new Story"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
             />
-            <button onClick={() => submitRequest(inputValue)}>Submit</button>
+            <button onClick={() => submitRequest(inputText)}>Submit</button>
           </div>
         </div>
-      }
-
+      )}
     </div>
   );
 };
 
 export default App;
-
-
-
-
-{/* <div className="app-container">
-<header className="app-header">
-  <h1>Welcome To Story World</h1>
-  <div className="input-container">
-    <input
-      type="text"
-      placeholder="Input text"
-      value={inputText}
-      onChange={(e) => setInputText(e.target.value)}
-    />
-    <button className="mic-button" onClick={handleRecord}>
-      {isRecording ? '🎙️' : '🎤'} {/* Show different icon when recording */}
-//     </button>
-//     <button onClick={submitRequest}>Submit</button>
-//   </div>
-// </header>
-// <main className="app-main">
-//   <div className="image-display-box">
-
-
-
-
-//     <div className="main-page">
-//       <div className={`image-display ${isAnimating ? 'animating' : ''}`}>
-//         <img
-//           className={`image ${isAnimating ? 'animating' : ''}`}
-//           src={images[currentImage]}
-//           alt="Carousel"
-//         />
-//       </div>
-//       <div className="story-class">
-//         {storyText}
-//       </div>
-//       <button className="prev-button" onClick={handlePrevious}>
-//         &#10094;
-//       </button>
-//       <button className="next-button" onClick={handleNext}>
-//         &#10095;
-//       </button>
-//     </div>
-//   </div>
-// </main>
